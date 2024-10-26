@@ -1,0 +1,86 @@
+import os
+import numpy as np
+import pandas as pd
+import cv2
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+
+# 파일 경로 및 설정
+annotation_file = 'C:/Users/dongjin/Desktop/project/_annotations.csv'
+image_dir = 'C:/Users/dongjin/Desktop/project/images'  # 이미지 파일이 있는 경로
+
+# 어노테이션 파일 읽기
+df = pd.read_csv(annotation_file)
+
+# 클래스 목록 설정
+classes = ['pothole']
+num_classes = len(classes)
+
+# 이미지 크기 설정
+IMG_WIDTH = 416
+IMG_HEIGHT = 416
+
+# 어노테이션 데이터 처리
+def load_image_and_boxes(df):
+    image_data = []
+    boxes_data = []
+
+    for index, row in df.iterrows():
+        img_path = os.path.join(image_dir, row['filename'])
+        image = load_img(img_path, target_size=(IMG_WIDTH, IMG_HEIGHT))
+        image = img_to_array(image)
+        image = image / 255.0  # 이미지 정규화
+
+        # Bounding Box 좌표
+        scale_x = IMG_WIDTH / row['width']
+        scale_y = IMG_HEIGHT / row['height']
+        xmin = int(row['xmin'] * scale_x)
+        ymin = int(row['ymin'] * scale_y)
+        xmax = int(row['xmax'] * scale_x)
+        ymax = int(row['ymax'] * scale_y)
+        
+        box = [xmin, ymin, xmax, ymax, classes.index(row['class'])]
+
+        image_data.append(image)
+        boxes_data.append(box)
+
+    return np.array(image_data), np.array(boxes_data)
+
+# 데이터 로드
+images, boxes = load_image_and_boxes(df)
+
+# 데이터셋을 학습용, 검증용으로 분할
+X_train, X_test, y_train, y_test = train_test_split(images, boxes, test_size=0.2, random_state=42)
+
+# 모델 정의 (YOLOv3 간단한 구조)
+def yolo_model():
+    model = models.Sequential()
+    
+    model.add(layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=(IMG_WIDTH, IMG_HEIGHT, 3)))
+    model.add(layers.MaxPooling2D((2, 2)))
+
+    model.add(layers.Conv2D(64, (3, 3), activation='relu', padding='same'))
+    model.add(layers.MaxPooling2D((2, 2)))
+
+    model.add(layers.Conv2D(128, (3, 3), activation='relu', padding='same'))
+    model.add(layers.MaxPooling2D((2, 2)))
+
+    model.add(layers.Flatten())
+    model.add(layers.Dense(128, activation='relu'))
+    model.add(layers.Dense(5))  # (xmin, ymin, xmax, ymax, class)
+
+    model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
+    
+    return model
+
+# 모델 생성 및 학습
+model = yolo_model()
+model.summary()
+
+# 학습
+model.fit(X_train, y_train, epochs=20, batch_size=16, validation_data=(X_test, y_test))
+
+# 모델 저장
+model.save('C:/Users/dongjin/Desktop/project/pothole_detection_model.h5')
