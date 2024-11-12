@@ -33,6 +33,24 @@ def classify_image(interpreter, image_np):
         output_data = interpreter.get_tensor(output_details[0]['index'])
     return output_data
 
+def async_infer(img_path):
+
+    current_time = time.time()
+    if current_time - last_submission_time >= 2:  # 2초 경과 확인
+        for prediction in result.get('predictions', []):
+            if prediction['confidence'] >= 0.47:
+                # Pothole detected, submit form with image
+                submit_form({
+                    'hazardType': hazard_info,
+                    'dates': datetime.now().strftime("%Y-%m-%d"),
+                    'hazardImage': img_path,
+                    'gps': gps_info,
+                    'state': '미조치'
+                })
+                # Update the last submission time
+                last_submission_time = current_time
+                break  # Once a submission is made, stop further checks
+
 @app.route('/')
 def index():
     return render_template('index.html')
